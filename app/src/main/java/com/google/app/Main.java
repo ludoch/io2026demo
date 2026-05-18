@@ -2,6 +2,9 @@ package com.google.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.auth.oauth2.GoogleCredentials;
+import com.google.auth.oauth2.IdTokenCredentials;
+import com.google.auth.oauth2.IdTokenProvider;
 import com.google.cloud.opentelemetry.trace.TraceConfiguration;
 import com.google.cloud.opentelemetry.trace.TraceExporter;
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -122,13 +125,30 @@ public class Main {
                 JsonNode reqNode = mapper.readTree(exchange.getRequestBody());
                 String message = reqNode.path("message").asText();
 
-                HttpRequest request = HttpRequest.newBuilder()
+                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(ORCHESTRATOR_URL + "/orchestrate"))
                         .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(reqNode)))
-                        .header("Content-Type", "application/json")
-                        .build();
+                        .header("Content-Type", "application/json");
+
+                // Inject GCP Identity Token if available
+                try {
+                    GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
+                    if (credentials instanceof IdTokenProvider) {
+                        IdTokenCredentials idTokenCreds = IdTokenCredentials.newBuilder()
+                                .setIdTokenProvider((IdTokenProvider) credentials)
+                                .setTargetAudience(ORCHESTRATOR_URL)
+                                .build();
+                        idTokenCreds.refreshIfExpired();
+                        requestBuilder.header("Authorization", "Bearer " + idTokenCreds.getIdToken().getTokenValue());
+                    }
+                } catch (Exception authEx) {
+                    System.err.println("Warning: Could not fetch OIDC Identity Token. Proceeding without auth. " + authEx.getMessage());
+                }
+
+                HttpRequest request = requestBuilder.build();
 
                 exchange.getResponseHeaders().set("Content-Type", "application/x-ndjson");
+
                 exchange.sendResponseHeaders(200, 0);
 
                 try (OutputStream os = exchange.getResponseBody()) {
