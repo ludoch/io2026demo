@@ -20,6 +20,7 @@ This directory contains the Java 25 multi-module Maven project that replicates t
 - [x] **CORS Configuration**: The Python FastAPI configures `CORSMiddleware`. **(Implemented manually in the JDK HTTP Servers).**
 - [x] **OpenTelemetry / Observability**: The Python `app` explicitly sets up `CloudTraceSpanExporter`. **(Implemented in `app/Main.java` using `com.google.cloud.opentelemetry:exporter-trace` & `io.opentelemetry`).**
 - [x] **State, Session Management & A2A**: **(Implemented: The Java Orchestrator now uses the A2A SDK's `RemoteA2AAgent` alongside the ADK's `SequentialAgent`. Note that for full compatibility over raw HTTP instead of Spring Boot, the child agents implement a native A2A JSON-RPC listener).**
+- [x] **Frontend Streaming Format**: The Python `main.py` parses ADK SSE events to generate structured NDJSON (`progress` and `result`) for the UI. **(Implemented: Java `app/Main.java` manually intercepts and transforms the Orchestrator's JSON line stream into the matching NDJSON frontend protocol).**
 
 ## Core Logic Parity (Python to Java)
 
