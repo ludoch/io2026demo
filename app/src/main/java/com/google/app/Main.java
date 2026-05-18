@@ -74,6 +74,31 @@ public class Main {
         }
     }
 
+    private static HttpRequest buildAuthRequest(String url, String method, String body) {
+        HttpRequest.Builder builder = HttpRequest.newBuilder().uri(URI.create(url));
+        if ("POST".equals(method)) {
+            builder.POST(HttpRequest.BodyPublishers.ofString(body != null ? body : "{}"));
+        } else {
+            builder.GET();
+        }
+        builder.header("Content-Type", "application/json");
+
+        try {
+            GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
+            if (credentials instanceof IdTokenProvider) {
+                IdTokenCredentials idTokenCreds = IdTokenCredentials.newBuilder()
+                        .setIdTokenProvider((IdTokenProvider) credentials)
+                        .setTargetAudience(ORCHESTRATOR_URL)
+                        .build();
+                idTokenCreds.refreshIfExpired();
+                builder.header("Authorization", "Bearer " + idTokenCreds.getIdToken().getTokenValue());
+            }
+        } catch (Exception e) {}
+
+        GlobalOpenTelemetry.getPropagators().getTextMapPropagator().inject(Context.current(), builder, HttpRequest.Builder::header);
+        return builder.build();
+    }
+
     static class ChatStreamHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -85,31 +110,54 @@ public class Main {
             Span span = tracer.spanBuilder("POST /api/chat_stream").startSpan();
             try (Scope scope = span.makeCurrent()) {
                 JsonNode reqNode = mapper.readTree(exchange.getRequestBody());
+                String message = reqNode.path("message").asText();
+                String requestedSessionId = reqNode.path("session_id").asText(null);
+                String userId = reqNode.path("user_id").asText("test_user");
 
-                HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                        .uri(URI.create(ORCHESTRATOR_URL + "/orchestrate"))
-                        .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(reqNode)))
-                        .header("Content-Type", "application/json");
-
-                // Inject GCP Identity Token if available
+                // Get Agent name
+                String agentName = "orchestrator_app";
                 try {
-                    GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
-                    if (credentials instanceof IdTokenProvider) {
-                        IdTokenCredentials idTokenCreds = IdTokenCredentials.newBuilder()
-                                .setIdTokenProvider((IdTokenProvider) credentials)
-                                .setTargetAudience(ORCHESTRATOR_URL)
-                                .build();
-                        idTokenCreds.refreshIfExpired();
-                        requestBuilder.header("Authorization", "Bearer " + idTokenCreds.getIdToken().getTokenValue());
+                    HttpRequest listReq = buildAuthRequest(ORCHESTRATOR_URL + "/list-apps", "GET", null);
+                    HttpResponse<String> listRes = httpClient.send(listReq, HttpResponse.BodyHandlers.ofString());
+                    if (listRes.statusCode() == 200) {
+                        JsonNode agents = mapper.readTree(listRes.body());
+                        if (agents.isArray() && agents.size() > 0) agentName = agents.get(0).asText();
                     }
-                } catch (Exception authEx) {
-                    System.err.println("Warning: Could not fetch OIDC Identity Token. Proceeding without auth. " + authEx.getMessage());
+                } catch (Exception e) {}
+
+                // Resolve Session ID
+                String sessionId = requestedSessionId;
+                try {
+                    if (sessionId != null && !sessionId.isEmpty() && !"null".equals(sessionId)) {
+                        HttpRequest checkReq = buildAuthRequest(ORCHESTRATOR_URL + "/apps/" + agentName + "/users/" + userId + "/sessions/" + sessionId, "GET", null);
+                        HttpResponse<String> res = httpClient.send(checkReq, HttpResponse.BodyHandlers.ofString());
+                        if (res.statusCode() == 404) sessionId = null;
+                    }
+                    if (sessionId == null || sessionId.isEmpty() || "null".equals(sessionId)) {
+                        HttpRequest createReq = buildAuthRequest(ORCHESTRATOR_URL + "/apps/" + agentName + "/users/" + userId + "/sessions", "POST", "{}");
+                        HttpResponse<String> res = httpClient.send(createReq, HttpResponse.BodyHandlers.ofString());
+                        if (res.statusCode() == 200) {
+                            sessionId = mapper.readTree(res.body()).path("id").asText();
+                        } else {
+                            sessionId = "session_fallback";
+                        }
+                    }
+                } catch (Exception e) {
+                    sessionId = "session_fallback";
                 }
 
-                // Inject trace context headers
-                GlobalOpenTelemetry.getPropagators().getTextMapPropagator().inject(Context.current(), requestBuilder, HttpRequest.Builder::header);
+                com.fasterxml.jackson.databind.node.ObjectNode runReq = mapper.createObjectNode();
+                runReq.put("appName", agentName);
+                runReq.put("userId", userId);
+                runReq.put("sessionId", sessionId);
+                com.fasterxml.jackson.databind.node.ObjectNode newMessage = mapper.createObjectNode();
+                newMessage.put("role", "user");
+                com.fasterxml.jackson.databind.node.ObjectNode part = mapper.createObjectNode();
+                part.put("text", message);
+                newMessage.putArray("parts").add(part);
+                runReq.set("newMessage", newMessage);
 
-                HttpRequest request = requestBuilder.build();
+                HttpRequest request = buildAuthRequest(ORCHESTRATOR_URL + "/run_sse", "POST", mapper.writeValueAsString(runReq));
 
                 exchange.getResponseHeaders().set("Content-Type", "application/x-ndjson");
                 exchange.sendResponseHeaders(200, 0);
@@ -137,8 +185,8 @@ public class Main {
                                         if (!contentNode.isMissingNode() && !contentNode.isNull()) {
                                             JsonNode parts = contentNode.path("parts");
                                             if (parts.isArray()) {
-                                                for (JsonNode part : parts) {
-                                                    String text = part.path("text").asText("");
+                                                for (JsonNode p : parts) {
+                                                    String text = p.path("text").asText("");
                                                     if (!text.isEmpty()) {
                                                         finalText.append(text);
                                                     }

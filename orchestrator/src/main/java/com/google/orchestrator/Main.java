@@ -65,7 +65,34 @@ public class Main {
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8001"));
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 
-        server.createContext("/orchestrate", new OrchestratorHandler()).getFilters().add(new CorsFilter());
+        server.createContext("/list-apps", exchange -> {
+            byte[] resp = "[\"orchestrator_app\"]".getBytes();
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, resp.length);
+            exchange.getResponseBody().write(resp);
+            exchange.close();
+        }).getFilters().add(new CorsFilter());
+
+        server.createContext("/apps/", exchange -> {
+            String path = exchange.getRequestURI().getPath();
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            if (exchange.getRequestMethod().equalsIgnoreCase("POST") && path.endsWith("/sessions")) {
+                String newId = java.util.UUID.randomUUID().toString();
+                byte[] resp = ("{\"id\":\"" + newId + "\"}").getBytes();
+                exchange.sendResponseHeaders(200, resp.length);
+                exchange.getResponseBody().write(resp);
+            } else if (exchange.getRequestMethod().equalsIgnoreCase("GET") && path.contains("/sessions/")) {
+                String id = path.substring(path.lastIndexOf("/") + 1);
+                byte[] resp = ("{\"id\":\"" + id + "\"}").getBytes();
+                exchange.sendResponseHeaders(200, resp.length);
+                exchange.getResponseBody().write(resp);
+            } else {
+                exchange.sendResponseHeaders(404, -1);
+            }
+            exchange.close();
+        }).getFilters().add(new CorsFilter());
+
+        server.createContext("/run_sse", new OrchestratorHandler()).getFilters().add(new CorsFilter());
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
         System.out.println("Orchestrator server started on port " + port);
@@ -218,7 +245,9 @@ public class Main {
 
                 try (OutputStream os = exchange.getResponseBody()) {
                     JsonNode reqNode = mapper.readTree(exchange.getRequestBody());
-                    String topic = reqNode.path("message").asText();
+                    String topic = reqNode.path("newMessage").path("parts").get(0).path("text").asText();
+                    String userId = reqNode.path("userId").asText("user1");
+                    String sessionId = reqNode.path("sessionId").asText("session1");
 
                     sendEvent(os, "progress", "🚀 Orchestrator started full logic pipeline...");
 
@@ -244,7 +273,7 @@ public class Main {
                     Runner runner = new Runner(pipelineAgent, "orchestrator_app", new InMemoryArtifactService(), new InMemorySessionService(), null);
                     Content inputContent = Content.builder().role("user").parts(Collections.singletonList(Part.builder().text(topic).build())).build();
                     
-                    List<Event> events = runner.runAsync("user1", "session1", inputContent, RunConfig.builder().build()).toList().blockingGet();
+                    List<Event> events = runner.runAsync(userId, sessionId, inputContent, RunConfig.builder().build()).toList().blockingGet();
 
                     String finalContent = "";
                     for (Event ev : events) {
