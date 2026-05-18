@@ -144,3 +144,51 @@ Our Java implementation goes further than a basic tutorial by implementing produ
 
 *   **Service-to-Service OIDC Auth**: The `HeaderInjectingA2AHttpClient` automatically mints Google Cloud Identity Tokens to secure inter-service communication.
 *   **Distributed OpenTelemetry Tracing**: The `Tracing` utility configures a `W3CTraceContextPropagator` to cascade span IDs across all microservices, allowing you to trace the entire workflow in Google Cloud Trace.
+
+---
+
+## Step 8: Running Locally
+
+To test the multi-agent system on your machine, you must run each microservice on a distinct port. Because they communicate via HTTP, they act exactly as they would in production.
+
+Open 5 separate terminal windows and run the following Maven commands:
+
+1.  **Researcher:** `PORT=8002 mvn exec:java -pl researcher -Dexec.mainClass="com.google.researcher.Main"`
+2.  **Judge:** `PORT=8003 mvn exec:java -pl judge -Dexec.mainClass="com.google.judge.Main"`
+3.  **Content Builder:** `PORT=8004 mvn exec:java -pl content-builder -Dexec.mainClass="com.google.contentbuilder.Main"`
+4.  **Orchestrator:** `PORT=8001 RESEARCHER_URL="http://localhost:8002" JUDGE_URL="http://localhost:8003" CONTENT_BUILDER_URL="http://localhost:8004" mvn exec:java -pl orchestrator -Dexec.mainClass="com.google.orchestrator.Main"`
+5.  **Frontend App:** `PORT=8000 AGENT_URL="http://localhost:8001" mvn exec:java -pl app -Dexec.mainClass="com.google.app.Main"`
+
+Visit `http://localhost:8000` in your browser to interact with the system!
+
+---
+
+## Step 9: Deploying to Cloud Run
+
+The true power of the A2A protocol is that these agents can be deployed as independent, auto-scaling serverless containers.
+
+Because this project uses the `jib-maven-plugin`, deploying to Cloud Run is seamless:
+
+```bash
+# 1. Deploy the child agents
+mvn compile jib:build -pl researcher -Dimage=gcr.io/YOUR_PROJECT/researcher
+gcloud run deploy researcher --image gcr.io/YOUR_PROJECT/researcher --allow-unauthenticated
+
+# ... (Repeat for judge and content-builder) ...
+
+# 2. Deploy the Orchestrator, linking the child agent URLs
+mvn compile jib:build -pl orchestrator -Dimage=gcr.io/YOUR_PROJECT/orchestrator
+gcloud run deploy orchestrator \
+  --image gcr.io/YOUR_PROJECT/orchestrator \
+  --set-env-vars="RESEARCHER_URL=https://researcher-xxx.a.run.app,JUDGE_URL=https://judge-xxx.a.run.app,CONTENT_BUILDER_URL=https://builder-xxx.a.run.app" \
+  --allow-unauthenticated
+
+# 3. Deploy the App, linking the Orchestrator URL
+mvn compile jib:build -pl app -Dimage=gcr.io/YOUR_PROJECT/app
+gcloud run deploy app \
+  --image gcr.io/YOUR_PROJECT/app \
+  --set-env-vars="AGENT_URL=https://orchestrator-xxx.a.run.app" \
+  --allow-unauthenticated
+```
+
+**Congratulations!** You have successfully built and deployed a production-ready, multi-agent system in Java.
