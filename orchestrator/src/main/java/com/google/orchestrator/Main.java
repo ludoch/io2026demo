@@ -134,6 +134,14 @@ public class Main {
                 .build();
     }
 
+    /**
+     * The Escalation Checker: Custom Logic for Loop Termination
+     * 
+     * In the ADK, a LoopAgent will repeat its sub-agents indefinitely until maxIterations
+     * is reached OR an agent escalates. This EscalationChecker runs right after the Judge.
+     * It reads the Judge's structured output from the session state and, if status="pass",
+     * it emits an Event with escalate=true, breaking the loop early.
+     */
     static class EscalationChecker extends BaseAgent {
         public EscalationChecker(String name) {
             super(name, "Checks if the judge passed.", null, null, null);
@@ -164,6 +172,16 @@ public class Main {
         }
     }
 
+    /**
+     * The Orchestrator: Managing Distributed Communication
+     * 
+     * This handler builds the hierarchical graph of agents. 
+     * 1. The Research Loop: Iterates [Researcher -> Judge -> EscalationChecker].
+     * 2. The Final Pipeline: Sequences [Research Loop -> Content Builder].
+     * 
+     * It uses RemoteA2AAgent to treat the child agents as independent, distributed 
+     * microservices over HTTP JSON-RPC, rather than in-memory objects.
+     */
     static class OrchestratorHandler implements HttpHandler {
         private static final TextMapGetter<HttpExchange> getter = new TextMapGetter<>() {
             @Override

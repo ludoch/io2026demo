@@ -32,6 +32,14 @@ public class Main {
         System.out.println("Researcher server started on port " + port);
     }
 
+    /**
+     * The Researcher Agent: Implementing Tool-Use (Grounding)
+     * 
+     * In a multi-agent system, the Researcher specializes in gathering real-time facts.
+     * Instead of relying on the LLM's internal knowledge (which might be outdated), 
+     * we equip this agent with the GoogleSearchTool. When used with Gemini models, 
+     * this natively invokes Vertex AI Grounding with Google Search.
+     */
     static class ResearchHandler extends A2ARpcHandler {
         @Override
         protected String processAgentLogic(String inputMessage) {

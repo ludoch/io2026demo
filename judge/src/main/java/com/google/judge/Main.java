@@ -34,6 +34,15 @@ public class Main {
         System.out.println("Judge server started on port " + port);
     }
 
+    /**
+     * The Judge Agent: Implementing Structured Output
+     * 
+     * The Judge is responsible for validating the output of the Researcher.
+     * To ensure programmatic control flow in our orchestrator, the Judge cannot
+     * just return free-text. We enforce a strict JSON Schema (status and feedback)
+     * using the outputSchema configuration. This guarantees the Orchestrator can
+     * reliably parse the 'pass' or 'fail' status.
+     */
     static class JudgeHandler extends A2ARpcHandler {
         @Override
         protected String processAgentLogic(String inputMessage) {

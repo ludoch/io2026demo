@@ -31,6 +31,14 @@ public class Main {
         System.out.println("Content Builder server started on port " + port);
     }
 
+    /**
+     * The Content Builder Agent: Context-Aware Generation
+     * 
+     * This agent takes the validated 'research_findings' from the session state
+     * and formats them into a final, user-ready markdown course. Because the
+     * Judge already guaranteed the quality of the facts, this agent only focuses
+     * on tone, formatting, and structure.
+     */
     static class BuildHandler extends A2ARpcHandler {
         @Override
         protected String processAgentLogic(String inputMessage) {
