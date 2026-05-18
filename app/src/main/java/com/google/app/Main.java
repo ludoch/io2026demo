@@ -10,6 +10,9 @@ import com.google.cloud.opentelemetry.trace.TraceExporter;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
+import io.opentelemetry.context.propagation.ContextPropagators;
+import io.opentelemetry.context.Context;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.SpanExporter;
@@ -57,6 +60,7 @@ public class Main {
                 .build();
             OpenTelemetrySdk sdk = OpenTelemetrySdk.builder()
                 .setTracerProvider(tracerProvider)
+                .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
                 .buildAndRegisterGlobal();
             tracer = sdk.getTracer("com.google.app");
         } catch (Exception e) {
@@ -64,6 +68,7 @@ public class Main {
             tracer = GlobalOpenTelemetry.getTracer("com.google.app");
         }
     }
+
 
     static class CorsFilter extends Filter {
         @Override
