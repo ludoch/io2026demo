@@ -120,17 +120,48 @@ public class Main {
                 exchange.sendResponseHeaders(200, 0);
 
                 try (OutputStream os = exchange.getResponseBody()) {
+                    StringBuilder finalText = new StringBuilder();
                     httpClient.send(request, HttpResponse.BodyHandlers.ofLines())
                             .body()
                             .forEach(line -> {
                                 try {
-                                    os.write((line + "\n").getBytes());
+                                    if (line.trim().isEmpty()) return;
+                                    
+                                    // Assuming the orchestrator sends JSON objects with "author" and "content" similar to Python SSE
+                                    JsonNode event = mapper.readTree(line);
+                                    String author = event.path("author").asText("");
+                                    
+                                    if ("researcher".equals(author)) {
+                                        os.write((mapper.writeValueAsString(mapper.createObjectNode().put("type", "progress").put("text", "🔍 Researcher is gathering information...")) + "\n").getBytes());
+                                    } else if ("judge".equals(author)) {
+                                        os.write((mapper.writeValueAsString(mapper.createObjectNode().put("type", "progress").put("text", "⚖️ Judge is evaluating findings...")) + "\n").getBytes());
+                                    } else if ("content_builder".equals(author)) {
+                                        os.write((mapper.writeValueAsString(mapper.createObjectNode().put("type", "progress").put("text", "✍️ Content Builder is writing the course...")) + "\n").getBytes());
+                                    }
+                                    
+                                    JsonNode contentNode = event.path("content");
+                                    if (!contentNode.isMissingNode() && !contentNode.isNull()) {
+                                        JsonNode parts = contentNode.path("parts");
+                                        if (parts.isArray()) {
+                                            for (JsonNode part : parts) {
+                                                String text = part.path("text").asText("");
+                                                if (!text.isEmpty()) {
+                                                    finalText.append(text);
+                                                }
+                                            }
+                                        }
+                                    }
                                     os.flush();
                                 } catch (IOException e) {
                                     e.printStackTrace();
                                 }
                             });
+                    
+                    // Send final result
+                    os.write((mapper.writeValueAsString(mapper.createObjectNode().put("type", "result").put("text", finalText.toString().trim())) + "\n").getBytes());
+                    os.flush();
                 }
+
             } catch (Exception e) {
                 span.recordException(e);
                 e.printStackTrace();
