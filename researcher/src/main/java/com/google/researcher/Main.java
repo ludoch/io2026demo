@@ -1,6 +1,7 @@
 package com.google.researcher;
 
 import com.google.a2a.A2ARpcHandler;
+import com.google.a2a.Tracing;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.agents.RunConfig;
 import com.google.adk.artifacts.InMemoryArtifactService;
@@ -21,6 +22,7 @@ import java.util.concurrent.Executors;
 public class Main {
 
     public static void main(String[] args) throws IOException {
+        Tracing.init("researcher");
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8002"));
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 
@@ -69,4 +71,3 @@ public class Main {
         }
     }
 }
-

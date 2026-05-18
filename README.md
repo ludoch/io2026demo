@@ -30,3 +30,9 @@ A precise audit of the Python ADK logic was conducted to ensure identical execut
 *   **Structured Outputs**: The Judge agent enforces strict JSON output formats (`status` and `feedback`) by passing a `com.google.genai.types.Schema` definition directly to the `outputSchema` property of the `LlmAgent.builder()`.
 *   **Prompt Alignment**: The instruction strings for all agents (`researcher`, `judge`, `content_builder`) are mapped verbatim from the Python implementation to ensure consistent LLM outputs.
 *   **State Callbacks**: The `afterAgentCallback` implementation captures the outputs (`research_findings` and `judge_feedback`) and writes them to the `ctx.stateDelta()` so downstream agents have historical context during execution.
+
+## Future Improvements / Pending Refinements
+
+- [ ] **Full Trace Propagation**: Extend the `W3CTraceContextPropagator` logic to the Orchestrator and individual Agents to ensure the span context is extracted and injected at every hop.
+- [ ] **Orchestrator-to-Agent Auth**: Implement OIDC Identity Token injection in the `orchestrator` when calling the `researcher`, `judge`, and `content_builder` endpoints.
+- [ ] **Structured Logging**: Replace `System.out.println` and `printStackTrace` with SLF4J/Logback for better observability in Cloud Logging.

@@ -44,6 +44,21 @@
                 <artifactId>google-auth-library-oauth2-http</artifactId>
                 <version>1.47.0</version>
             </dependency>
+            <dependency>
+                <groupId>com.google.cloud.opentelemetry</groupId>
+                <artifactId>exporter-trace</artifactId>
+                <version>0.36.0</version>
+            </dependency>
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-sdk</artifactId>
+                <version>1.62.0</version>
+            </dependency>
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-api</artifactId>
+                <version>1.43.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

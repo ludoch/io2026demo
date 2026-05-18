@@ -3,10 +3,12 @@ package com.google.orchestrator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.google.a2a.Tracing;
+import com.google.a2a.CorsFilter;
+import com.google.a2a.HeaderInjectingA2AHttpClient;
 import com.google.adk.a2a.agent.RemoteA2AAgent;
 import com.google.adk.agents.BaseAgent;
 import com.google.adk.agents.CallbackContext;
-import com.google.adk.agents.Callbacks;
 import com.google.adk.agents.InvocationContext;
 import com.google.adk.agents.LoopAgent;
 import com.google.adk.agents.RunConfig;
@@ -23,12 +25,20 @@ import io.a2a.client.Client;
 import io.a2a.client.config.ClientConfig;
 import io.a2a.client.transport.jsonrpc.JSONRPCTransport;
 import io.a2a.client.transport.jsonrpc.JSONRPCTransportConfig;
+import io.a2a.client.http.JdkA2AHttpClient;
 import io.a2a.spec.AgentCard;
 import io.a2a.spec.AgentCapabilities;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
+import io.opentelemetry.context.propagation.TextMapGetter;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Maybe;
-import com.google.a2a.CorsFilter;
-import com.sun.net.httpserver.Filter;
+import com.google.auth.oauth2.GoogleCredentials;
+import com.google.auth.oauth2.IdTokenCredentials;
+import com.google.auth.oauth2.IdTokenProvider;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -48,8 +58,10 @@ public class Main {
     private static final String BUILDER_URL = System.getenv().getOrDefault("CONTENT_BUILDER_URL", "http://localhost:8004");
     
     private static final ObjectMapper mapper = new ObjectMapper();
+    private static Tracer tracer;
 
     public static void main(String[] args) throws IOException {
+        tracer = Tracing.init("orchestrator");
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8001"));
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 
@@ -90,8 +102,27 @@ public class Main {
                 .capabilities(new AgentCapabilities.Builder().streaming(false).build())
                 .build();
 
+        Map<String, String> headers = new java.util.HashMap<>();
+        GlobalOpenTelemetry.getPropagators().getTextMapPropagator().inject(Context.current(), headers, (carrier, k, v) -> carrier.put(k, v));
+
+        try {
+            GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
+            if (credentials instanceof IdTokenProvider) {
+                IdTokenCredentials idTokenCreds = IdTokenCredentials.newBuilder()
+                        .setIdTokenProvider((IdTokenProvider) credentials)
+                        .setTargetAudience(url)
+                        .build();
+                idTokenCreds.refreshIfExpired();
+                headers.put("Authorization", "Bearer " + idTokenCreds.getIdToken().getTokenValue());
+            }
+        } catch (Exception e) {
+            System.err.println("Warning: Could not fetch OIDC Identity Token for agent " + name + ": " + e.getMessage());
+        }
+
+        HeaderInjectingA2AHttpClient authenticatedHttpClient = new HeaderInjectingA2AHttpClient(new JdkA2AHttpClient(), headers);
+
         Client a2aClient = Client.builder(mockCard)
-                .withTransport(JSONRPCTransport.class, new JSONRPCTransportConfig())
+                .withTransport(JSONRPCTransport.class, new JSONRPCTransportConfig(authenticatedHttpClient))
                 .clientConfig(new ClientConfig.Builder().setStreaming(false).build())
                 .build();
 
@@ -134,6 +165,21 @@ public class Main {
     }
 
     static class OrchestratorHandler implements HttpHandler {
+        private static final TextMapGetter<HttpExchange> getter = new TextMapGetter<>() {
+            @Override
+            public Iterable<String> keys(HttpExchange carrier) {
+                return carrier.getRequestHeaders().keySet();
+            }
+
+            @Override
+            public String get(HttpExchange carrier, String key) {
+                if (carrier.getRequestHeaders().containsKey(key)) {
+                    return carrier.getRequestHeaders().getFirst(key);
+                }
+                return null;
+            }
+        };
+
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -141,53 +187,65 @@ public class Main {
                 return;
             }
 
-            exchange.getResponseHeaders().set("Content-Type", "application/x-ndjson");
-            exchange.sendResponseHeaders(200, 0);
+            Context parentContext = GlobalOpenTelemetry.getPropagators().getTextMapPropagator()
+                    .extract(Context.current(), exchange, getter);
 
-            try (OutputStream os = exchange.getResponseBody()) {
-                JsonNode reqNode = mapper.readTree(exchange.getRequestBody());
-                String topic = reqNode.path("message").asText();
+            Span span = tracer.spanBuilder("POST /orchestrate")
+                    .setParent(parentContext)
+                    .startSpan();
 
-                sendEvent(os, "progress", "🚀 Orchestrator started full logic pipeline...");
+            try (Scope scope = span.makeCurrent()) {
+                exchange.getResponseHeaders().set("Content-Type", "application/x-ndjson");
+                exchange.sendResponseHeaders(200, 0);
 
-                RemoteA2AAgent researcher = createRemoteAgent("researcher", RESEARCHER_URL, "research_findings");
-                RemoteA2AAgent judge = createRemoteAgent("judge", JUDGE_URL, "judge_feedback");
-                EscalationChecker escalationChecker = new EscalationChecker("escalation_checker");
+                try (OutputStream os = exchange.getResponseBody()) {
+                    JsonNode reqNode = mapper.readTree(exchange.getRequestBody());
+                    String topic = reqNode.path("message").asText();
 
-                LoopAgent researchLoop = LoopAgent.builder()
-                        .name("research_loop")
-                        .description("Iteratively researches and judges.")
-                        .subAgents(ImmutableList.of(researcher, judge, escalationChecker))
-                        .maxIterations(3)
-                        .build();
+                    sendEvent(os, "progress", "🚀 Orchestrator started full logic pipeline...");
 
-                RemoteA2AAgent contentBuilder = createRemoteAgent("content_builder", BUILDER_URL, "final_content");
+                    RemoteA2AAgent researcher = createRemoteAgent("researcher", RESEARCHER_URL, "research_findings");
+                    RemoteA2AAgent judge = createRemoteAgent("judge", JUDGE_URL, "judge_feedback");
+                    EscalationChecker escalationChecker = new EscalationChecker("escalation_checker");
 
-                SequentialAgent pipelineAgent = SequentialAgent.builder()
-                        .name("course_creation_pipeline")
-                        .description("Full pipeline with loops.")
-                        .subAgents(ImmutableList.of(researchLoop, contentBuilder))
-                        .build();
+                    LoopAgent researchLoop = LoopAgent.builder()
+                            .name("research_loop")
+                            .description("Iteratively researches and judges.")
+                            .subAgents(ImmutableList.of(researcher, judge, escalationChecker))
+                            .maxIterations(3)
+                            .build();
 
-                Runner runner = new Runner(pipelineAgent, "orchestrator_app", new InMemoryArtifactService(), new InMemorySessionService(), null);
-                Content inputContent = Content.builder().role("user").parts(Collections.singletonList(Part.builder().text(topic).build())).build();
-                
-                List<Event> events = runner.runAsync("user1", "session1", inputContent, RunConfig.builder().build()).toList().blockingGet();
+                    RemoteA2AAgent contentBuilder = createRemoteAgent("content_builder", BUILDER_URL, "final_content");
 
-                String finalContent = "";
-                for (Event ev : events) {
-                    if (ev.content().isPresent() && ev.content().get().parts().isPresent()) {
-                        for (Part p : ev.content().get().parts().get()) {
-                            if (p.text().isPresent()) {
-                                finalContent += p.text().get();
+                    SequentialAgent pipelineAgent = SequentialAgent.builder()
+                            .name("course_creation_pipeline")
+                            .description("Full pipeline with loops.")
+                            .subAgents(ImmutableList.of(researchLoop, contentBuilder))
+                            .build();
+
+                    Runner runner = new Runner(pipelineAgent, "orchestrator_app", new InMemoryArtifactService(), new InMemorySessionService(), null);
+                    Content inputContent = Content.builder().role("user").parts(Collections.singletonList(Part.builder().text(topic).build())).build();
+                    
+                    List<Event> events = runner.runAsync("user1", "session1", inputContent, RunConfig.builder().build()).toList().blockingGet();
+
+                    String finalContent = "";
+                    for (Event ev : events) {
+                        if (ev.content().isPresent() && ev.content().get().parts().isPresent()) {
+                            for (Part p : ev.content().get().parts().get()) {
+                                if (p.text().isPresent()) {
+                                    finalContent += p.text().get();
+                                }
                             }
                         }
                     }
-                }
 
-                sendEvent(os, "result", finalContent);
-            } catch (Exception e) {
-                e.printStackTrace();
+                    sendEvent(os, "result", finalContent);
+                } catch (Exception e) {
+                    span.recordException(e);
+                    e.printStackTrace();
+                }
+            } finally {
+                span.end();
             }
         }
 

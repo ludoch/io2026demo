@@ -2,23 +2,16 @@ package com.google.app;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.a2a.Tracing;
+import com.google.a2a.CorsFilter;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.IdTokenCredentials;
 import com.google.auth.oauth2.IdTokenProvider;
-import com.google.cloud.opentelemetry.trace.TraceConfiguration;
-import com.google.cloud.opentelemetry.trace.TraceExporter;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
-import io.opentelemetry.context.propagation.ContextPropagators;
 import io.opentelemetry.context.Context;
-import io.opentelemetry.sdk.OpenTelemetrySdk;
-import io.opentelemetry.sdk.trace.SdkTracerProvider;
-import io.opentelemetry.sdk.trace.export.SpanExporter;
-import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
-import com.google.a2a.CorsFilter;
-import com.sun.net.httpserver.Filter;
+import io.opentelemetry.context.Scope;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -41,7 +34,7 @@ public class Main {
     private static Tracer tracer;
 
     public static void main(String[] args) throws IOException {
-        initOpenTelemetry();
+        tracer = Tracing.init("app");
 
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8000"));
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
@@ -52,23 +45,6 @@ public class Main {
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
         System.out.println("App server started on port " + port);
-    }
-
-    private static void initOpenTelemetry() {
-        try {
-            SpanExporter exporter = TraceExporter.createWithDefaultConfiguration();
-            SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
-                .addSpanProcessor(BatchSpanProcessor.builder(exporter).build())
-                .build();
-            OpenTelemetrySdk sdk = OpenTelemetrySdk.builder()
-                .setTracerProvider(tracerProvider)
-                .setPropagators(ContextPropagators.create(W3CTraceContextPropagator.getInstance()))
-                .buildAndRegisterGlobal();
-            tracer = sdk.getTracer("com.google.app");
-        } catch (Exception e) {
-            System.err.println("Could not initialize Cloud Trace Exporter: " + e.getMessage());
-            tracer = GlobalOpenTelemetry.getTracer("com.google.app");
-        }
     }
 
     static class StaticHandler implements HttpHandler {
@@ -107,9 +83,8 @@ public class Main {
             }
 
             Span span = tracer.spanBuilder("POST /api/chat_stream").startSpan();
-            try (io.opentelemetry.context.Scope scope = span.makeCurrent()) {
+            try (Scope scope = span.makeCurrent()) {
                 JsonNode reqNode = mapper.readTree(exchange.getRequestBody());
-                String message = reqNode.path("message").asText();
 
                 HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(ORCHESTRATOR_URL + "/orchestrate"))
@@ -131,10 +106,12 @@ public class Main {
                     System.err.println("Warning: Could not fetch OIDC Identity Token. Proceeding without auth. " + authEx.getMessage());
                 }
 
+                // Inject trace context headers
+                GlobalOpenTelemetry.getPropagators().getTextMapPropagator().inject(Context.current(), requestBuilder, HttpRequest.Builder::header);
+
                 HttpRequest request = requestBuilder.build();
 
                 exchange.getResponseHeaders().set("Content-Type", "application/x-ndjson");
-
                 exchange.sendResponseHeaders(200, 0);
 
                 try (OutputStream os = exchange.getResponseBody()) {
@@ -175,10 +152,7 @@ public class Main {
                                 });
                             });
 
-                    // Wait for the async stream to complete before closing the connection
                     future.join();
-
-                    // Send final result
                     os.write((mapper.writeValueAsString(mapper.createObjectNode().put("type", "result").put("text", finalText.toString().trim())) + "\n").getBytes());
                     os.flush();
                 }
@@ -193,4 +167,3 @@ public class Main {
         }
     }
 }
-
