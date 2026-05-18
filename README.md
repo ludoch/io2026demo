@@ -2,6 +2,8 @@
 
 This directory contains the Java 25 multi-module Maven project that replicates the Python ADK-based microservices architecture.
 
+**Reference Original Python Code:** [build-with-ai/production-ready-ai](https://github.com/GoogleCloudPlatform/devrel-demos/tree/main/agents/build-with-ai/production-ready-ai/prai-roadshow-lab-1-complete)
+
 ## File Mapping Table
 
 | Python File (Original) | Java File (Equivalent) | Purpose |
@@ -16,11 +18,11 @@ This directory contains the Java 25 multi-module Maven project that replicates t
 ## Implemented Python Logic Parity
 
 - [x] **Google Search Tool (Grounding)**: The ADK `GoogleSearchTool` internally maps directly to the Vertex AI Grounding API when used with Gemini 2 models, matching the Python implementation.
-- [x] **Service-to-Service Authentication**: Implemented robust OIDC Identity Token injection using `google-auth-library-oauth2-http` for secure inter-service communication.
-- [x] **CORS Configuration**: Implemented a reusable `CorsFilter` extracted into a shared Maven module and applied to the JDK HTTP Servers, matching FastAPI's `CORSMiddleware`.
-- [x] **OpenTelemetry / Observability**: Full Distributed Trace Context Propagation is implemented using `W3CTraceContextPropagator` to cascade traces across the microservices.
-- [x] **State, Session Management & A2A**: The Java Orchestrator uses the A2A SDK's `RemoteA2AAgent`. Child agents extend a reusable `A2ARpcHandler` (in a shared module) to eliminate JSON-RPC boilerplate.
-- [x] **Frontend Streaming Format**: The `app/Main.java` server uses asynchronous, reactive streams (`HttpResponse.BodyHandlers.ofPublisher()`) to parse ADK SSE events and generate structured NDJSON (`progress` and `result`) for the UI, outperforming the blocking Python equivalent.
+- [x] **Service-to-Service Authentication**: Implemented robust OIDC Identity Token injection across all service boundaries (`app -> orchestrator` and `orchestrator -> agents`).
+- [x] **CORS Configuration**: Implemented a reusable `CorsFilter` extracted into a shared Maven module.
+- [x] **OpenTelemetry / Observability**: Full Distributed Trace Context Propagation is implemented across the entire stack using the shared `Tracing` utility.
+- [x] **State, Session Management & A2A**: Reusable `A2ARpcHandler` and `HeaderInjectingA2AHttpClient` in the `shared` module eliminate boilerplate.
+- [x] **Frontend Streaming Format**: Asynchronous, reactive streams for SSE parsing.
 
 ## Core Logic Parity (Python to Java)
 
@@ -33,6 +35,6 @@ A precise audit of the Python ADK logic was conducted to ensure identical execut
 
 ## Future Improvements / Pending Refinements
 
-- [ ] **Full Trace Propagation**: Extend the `W3CTraceContextPropagator` logic to the Orchestrator and individual Agents to ensure the span context is extracted and injected at every hop.
-- [ ] **Orchestrator-to-Agent Auth**: Implement OIDC Identity Token injection in the `orchestrator` when calling the `researcher`, `judge`, and `content_builder` endpoints.
+- [x] **Full Trace Propagation**: Implemented using `Tracing` utility and `W3CTraceContextPropagator`.
+- [x] **Orchestrator-to-Agent Auth**: Implemented using `HeaderInjectingA2AHttpClient` and `GoogleCredentials`.
 - [ ] **Structured Logging**: Replace `System.out.println` and `printStackTrace` with SLF4J/Logback for better observability in Cloud Logging.
