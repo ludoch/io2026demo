@@ -8,6 +8,7 @@
     <packaging>pom</packaging>
     
     <modules>
+        <module>shared</module>
         <module>app</module>
         <module>orchestrator</module>
         <module>researcher</module>
