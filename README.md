@@ -4,6 +4,8 @@ This directory contains the Java 25 multi-module Maven project that replicates t
 
 **Reference Original Python Code:** [build-with-ai/production-ready-ai](https://github.com/GoogleCloudPlatform/devrel-demos/tree/main/agents/build-with-ai/production-ready-ai/prai-roadshow-lab-1-complete)
 
+**📖 Read the Tutorial:** We have translated the original Google Codelab into a comprehensive Java guide. If you want to understand how this multi-agent architecture is built step-by-step—including Tool Use, Structured Outputs, and Cloud Run deployment—please read the [Java Codelab (codelab.md)](codelab.md).
+
 ## File Mapping Table
 
 | Python File (Original) | Java File (Equivalent) | Purpose |
