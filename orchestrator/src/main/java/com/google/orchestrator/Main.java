@@ -27,6 +27,7 @@ import io.a2a.spec.AgentCard;
 import io.a2a.spec.AgentCapabilities;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Maybe;
+import com.google.a2a.CorsFilter;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -56,26 +57,6 @@ public class Main {
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
         System.out.println("Orchestrator server started on port " + port);
-    }
-
-    static class CorsFilter extends Filter {
-        @Override
-        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
-            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(204, -1);
-                return;
-            }
-            chain.doFilter(exchange);
-        }
-
-        @Override
-        public String description() {
-            return "CORS Filter";
-        }
     }
 
     private static Maybe<Content> saveOutputCallback(String key, CallbackContext ctx) {

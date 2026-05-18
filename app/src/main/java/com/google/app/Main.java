@@ -17,6 +17,7 @@ import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.SpanExporter;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
+import com.google.a2a.CorsFilter;
 import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -67,27 +68,6 @@ public class Main {
         } catch (Exception e) {
             System.err.println("Could not initialize Cloud Trace Exporter: " + e.getMessage());
             tracer = GlobalOpenTelemetry.getTracer("com.google.app");
-        }
-    }
-
-
-    static class CorsFilter extends Filter {
-        @Override
-        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
-            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
-            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(204, -1);
-                return;
-            }
-            chain.doFilter(exchange);
-        }
-
-        @Override
-        public String description() {
-            return "CORS Filter";
         }
     }
 
