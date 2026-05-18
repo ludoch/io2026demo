@@ -8,6 +8,45 @@ You will build a system that can iteratively research a topic and write a high-q
 
 ---
 
+## Prerequisites & Google Cloud Setup
+
+Before diving into the code, ensure you have **Java 25** (or a compatible LTS) and **Maven 3.8+** installed. Then, configure your Google Cloud environment using the following one-shot commands:
+
+```bash
+# 1. Login to Google Cloud (CLI and Application Default Credentials for local testing)
+gcloud auth login
+gcloud auth application-default login
+
+# 2. Set your Project ID
+export PROJECT_ID="your-google-cloud-project-id"
+gcloud config set project $PROJECT_ID
+
+# 3. Enable Required APIs
+gcloud services enable \
+  aiplatform.googleapis.com \
+  run.googleapis.com \
+  cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com \
+  cloudtrace.googleapis.com
+
+# 4. Grant IAM permissions to the default Compute Engine Service Account
+# (This is the default identity used by Cloud Run instances)
+PROJECT_NUM=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+COMPUTE_SA="${PROJECT_NUM}-compute@developer.gserviceaccount.com"
+
+# Allow Cloud Run to call Vertex AI (Gemini)
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${COMPUTE_SA}" \
+  --role="roles/aiplatform.user"
+
+# Allow Cloud Run to write Distributed Traces
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+  --member="serviceAccount:${COMPUTE_SA}" \
+  --role="roles/cloudtrace.agent"
+```
+
+---
+
 ## Step 1: Introduction to the Architecture
 
 Instead of a single giant prompt ("Write me a 5-page course on Quantum Computing"), we break the problem down into specialized roles:
