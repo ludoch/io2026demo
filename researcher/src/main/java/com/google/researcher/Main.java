@@ -65,7 +65,7 @@ public class Main {
                     LlmAgent researcher = LlmAgent.builder()
                             .name("researcher")
                             .description("Gathers information on a topic using Google Search.")
-                            .model("gemini-2.0-flash")
+                            .model("gemini-3-flash-preview")
                             .instruction(instruction)
                             .tools(Collections.singletonList(new GoogleSearchTool()))
                             .build();

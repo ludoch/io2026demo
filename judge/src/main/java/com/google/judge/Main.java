@@ -77,7 +77,7 @@ public class Main {
                     LlmAgent judge = LlmAgent.builder()
                             .name("judge")
                             .description("Evaluates the quality of research.")
-                            .model("gemini-2.0-flash")
+                            .model("gemini-3-flash-preview")
                             .instruction(instruction)
                             .outputSchema(outputSchema)
                             .build();

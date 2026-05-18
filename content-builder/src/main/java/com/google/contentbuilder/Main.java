@@ -68,7 +68,7 @@ public class Main {
                     LlmAgent builder = LlmAgent.builder()
                             .name("content_builder")
                             .description("Builds course content from research.")
-                            .model("gemini-2.0-flash")
+                            .model("gemini-3-flash-preview")
                             .instruction(instruction)
                             .build();
 
