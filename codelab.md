@@ -130,11 +130,15 @@ SequentialAgent pipelineAgent = SequentialAgent.builder()
 
 ---
 
-## Step 6: The Frontend App (Reactive Streaming)
+## Step 6: The Frontend App (Session Management & Reactive Streaming)
 
 **Location in Code:** `app/src/main/java/com/google/app/Main.java`
 
-The user-facing web server handles the request. To provide a responsive UI, we intercept the ADK Server-Sent Events (SSE) from the Orchestrator as they arrive. Using Java 11's asynchronous `HttpResponse.BodyHandlers.ofLines()`, we map the events into structured NDJSON (`{"type": "progress"...}`) so the UI can show loading states (e.g., "🔍 Researcher is gathering information...").
+The user-facing web server handles the request. To provide a responsive and stateful UI:
+
+1.  **Session Lifecycle**: Before querying the LLM, the frontend app fetches an OIDC-authenticated `sessionId` from the Orchestrator's `/sessions` API to maintain history.
+2.  **SSE Streaming**: We intercept the ADK Server-Sent Events (SSE) from the Orchestrator via the `/run_sse` endpoint as they arrive. Using Java 11's asynchronous `HttpResponse.BodyHandlers.ofLines()` combined with Virtual Threads, we map the events into structured NDJSON (`{"type": "progress"...}`) so the UI can show loading states (e.g., "🔍 Researcher is gathering information...").
+
 
 ---
 
