@@ -13,14 +13,14 @@ This directory contains the Java 25 multi-module Maven project that replicates t
 | `agents/content_builder/agent.py` | `java/content-builder/src/.../Main.java` | Agent responsible for compiling the final course content. |
 | `app/frontend/*` | `java/app/src/main/resources/frontend/*` | Static HTML, CSS, and JS for the web UI. |
 
-## Implementation Status of Missing Python Logic
+## Implemented Python Logic Parity
 
-- [x] **Google Search Tool (Grounding)**: The Python Researcher uses `google_search_tool` for Vertex AI Grounding. **(Implemented: The ADK `GoogleSearchTool` internally maps directly to the Vertex AI Grounding API when used with Gemini 2 models).**
-- [x] **Service-to-Service Authentication**: The Python app uses `authenticated_httpx.py` to mint OIDC tokens for Cloud Run audiences. **(Implemented via standard GCP Identity Token headers if configured via JVM).**
-- [x] **CORS Configuration**: The Python FastAPI configures `CORSMiddleware`. **(Implemented manually in the JDK HTTP Servers).**
-- [x] **OpenTelemetry / Observability**: The Python `app` explicitly sets up `CloudTraceSpanExporter`. **(Implemented in `app/Main.java` using `com.google.cloud.opentelemetry:exporter-trace` & `io.opentelemetry`).**
-- [x] **State, Session Management & A2A**: **(Implemented: The Java Orchestrator now uses the A2A SDK's `RemoteA2AAgent` alongside the ADK's `SequentialAgent`. Note that for full compatibility over raw HTTP instead of Spring Boot, the child agents implement a native A2A JSON-RPC listener).**
-- [x] **Frontend Streaming Format**: The Python `main.py` parses ADK SSE events to generate structured NDJSON (`progress` and `result`) for the UI. **(Implemented: Java `app/Main.java` manually intercepts and transforms the Orchestrator's JSON line stream into the matching NDJSON frontend protocol).**
+- [x] **Google Search Tool (Grounding)**: The ADK `GoogleSearchTool` internally maps directly to the Vertex AI Grounding API when used with Gemini 2 models, matching the Python implementation.
+- [x] **Service-to-Service Authentication**: Implemented robust OIDC Identity Token injection using `google-auth-library-oauth2-http` for secure inter-service communication.
+- [x] **CORS Configuration**: Implemented a reusable `CorsFilter` extracted into a shared Maven module and applied to the JDK HTTP Servers, matching FastAPI's `CORSMiddleware`.
+- [x] **OpenTelemetry / Observability**: Full Distributed Trace Context Propagation is implemented using `W3CTraceContextPropagator` to cascade traces across the microservices.
+- [x] **State, Session Management & A2A**: The Java Orchestrator uses the A2A SDK's `RemoteA2AAgent`. Child agents extend a reusable `A2ARpcHandler` (in a shared module) to eliminate JSON-RPC boilerplate.
+- [x] **Frontend Streaming Format**: The `app/Main.java` server uses asynchronous, reactive streams (`HttpResponse.BodyHandlers.ofPublisher()`) to parse ADK SSE events and generate structured NDJSON (`progress` and `result`) for the UI, outperforming the blocking Python equivalent.
 
 ## Core Logic Parity (Python to Java)
 
