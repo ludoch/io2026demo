@@ -11,6 +11,7 @@ import io.opentelemetry.sdk.OpenTelemetrySdk;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.export.SpanExporter;
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
+import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -37,8 +38,8 @@ public class Main {
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8000"));
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 
-        server.createContext("/", new StaticHandler());
-        server.createContext("/api/chat_stream", new ChatStreamHandler());
+        server.createContext("/", new StaticHandler()).getFilters().add(new CorsFilter());
+        server.createContext("/api/chat_stream", new ChatStreamHandler()).getFilters().add(new CorsFilter());
 
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
@@ -58,6 +59,26 @@ public class Main {
         } catch (Exception e) {
             System.err.println("Could not initialize Cloud Trace Exporter: " + e.getMessage());
             tracer = GlobalOpenTelemetry.getTracer("com.google.app");
+        }
+    }
+
+    static class CorsFilter extends Filter {
+        @Override
+        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+            chain.doFilter(exchange);
+        }
+
+        @Override
+        public String description() {
+            return "CORS Filter";
         }
     }
 
@@ -91,15 +112,6 @@ public class Main {
     static class ChatStreamHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
-
-            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(204, -1);
-                return;
-            }
-
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(405, -1);
                 return;
@@ -172,3 +184,4 @@ public class Main {
         }
     }
 }
+

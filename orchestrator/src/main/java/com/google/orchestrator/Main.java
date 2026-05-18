@@ -27,6 +27,7 @@ import io.a2a.spec.AgentCard;
 import io.a2a.spec.AgentCapabilities;
 import io.reactivex.rxjava3.core.Flowable;
 import io.reactivex.rxjava3.core.Maybe;
+import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
@@ -51,10 +52,30 @@ public class Main {
         int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "8001"));
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
 
-        server.createContext("/orchestrate", new OrchestratorHandler());
+        server.createContext("/orchestrate", new OrchestratorHandler()).getFilters().add(new CorsFilter());
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         server.start();
         System.out.println("Orchestrator server started on port " + port);
+    }
+
+    static class CorsFilter extends Filter {
+        @Override
+        public void doFilter(HttpExchange exchange, Chain chain) throws IOException {
+            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+            chain.doFilter(exchange);
+        }
+
+        @Override
+        public String description() {
+            return "CORS Filter";
+        }
     }
 
     private static Maybe<Content> saveOutputCallback(String key, CallbackContext ctx) {
@@ -134,15 +155,6 @@ public class Main {
     static class OrchestratorHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type");
-
-            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(204, -1);
-                return;
-            }
-
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(405, -1);
                 return;
