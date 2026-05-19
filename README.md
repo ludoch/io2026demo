@@ -10,11 +10,11 @@ This directory contains the Java 25 multi-module Maven project that replicates t
 
 | Python File (Original) | Java File (Equivalent) | Purpose |
 | :--- | :--- | :--- |
-| `app/main.py` | `java/app/src/.../Main.java` | Main web server, hosts frontend assets, and proxies Chat API requests (SSE) to the Orchestrator. |
-| `agents/orchestrator/agent.py` | `java/orchestrator/src/.../Main.java` | Orchestrates the multi-agent workflow loop (Researcher -> Judge -> Content Builder). |
-| `agents/researcher/agent.py` | `java/researcher/src/.../Main.java` | Agent responsible for researching the topic. |
-| `agents/judge/agent.py` | `java/judge/src/.../Main.java` | Agent responsible for evaluating the research against the original request. |
-| `agents/content_builder/agent.py` | `java/content-builder/src/.../Main.java` | Agent responsible for compiling the final course content. |
+| `app/main.py` | `app/src/main/java/com/google/app/Main.java` | Main web server, hosts frontend assets, and proxies Chat API requests (SSE) to the Orchestrator. |
+| `agents/orchestrator/agent.py` | `orchestrator/src/main/java/com/google/orchestrator/Main.java` | Orchestrates the multi-agent workflow loop (Researcher -> Judge -> Content Builder). |
+| `agents/researcher/agent.py` | `researcher/src/main/java/com/google/researcher/Main.java` | Agent responsible for researching the topic. |
+| `agents/judge/agent.py` | `judge/src/main/java/com/google/judge/Main.java` | Agent responsible for evaluating the research against the original request. |
+| `agents/content_builder/agent.py` | `content-builder/src/main/java/com/google/contentbuilder/Main.java` | Agent responsible for compiling the final course content. |
 | `app/frontend/*` | `java/app/src/main/resources/frontend/*` | Static HTML, CSS, and JS for the web UI. |
 
 ## Implemented Python Logic Parity

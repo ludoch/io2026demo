@@ -120,7 +120,14 @@ The Content Builder is purely generative. It assumes the facts in the `research_
 LlmAgent builder = LlmAgent.builder()
         .name("content_builder")
         .model("gemini-3-flash-preview")
-        .instruction("You are an expert course creator. Formatting Rules...")
+        .instruction("You are an expert course creator.\n" +
+                     "Take the research findings and transform them into a well-structured, engaging course module.\n" +
+                     "Formatting Rules:\n" +
+                     "1. Start with a main title using a single `#` (H1).\n" +
+                     "2. Use `##` (H2) for the Table of Contents.\n" +
+                     "3. Use bullet points and clear paragraphs.\n" +
+                     "4. Maintain a professional but engaging tone.\n\n" +
+                     "Ensure the content directly addresses the user's original request.")
         .build();
 ```
 
@@ -176,7 +183,7 @@ SequentialAgent pipelineAgent = SequentialAgent.builder()
 The user-facing web server handles the request. To provide a responsive and stateful UI:
 
 1.  **Session Lifecycle**: Before querying the LLM, the frontend app fetches an OIDC-authenticated `sessionId` from the Orchestrator's `/sessions` API to maintain history.
-2.  **SSE Streaming**: We intercept the ADK Server-Sent Events (SSE) from the Orchestrator via the `/run_sse` endpoint as they arrive. Using Java 11's asynchronous `HttpResponse.BodyHandlers.ofLines()` combined with Virtual Threads, we map the events into structured NDJSON (`{"type": "progress"...}`) so the UI can show loading states (e.g., "🔍 Researcher is gathering information...").
+2.  **SSE Streaming**: We intercept the ADK Server-Sent Events (SSE) from the Orchestrator via the `/run_sse` endpoint as they arrive. Using Java 11's asynchronous `HttpResponse.BodyHandlers.ofLines()` combined with Virtual Threads, we map the events into structured NDJSON (e.g., `{"type": "progress", "text": "..."}`) so the UI can show loading states (e.g., "🔍 Researcher is gathering information...").
 
 
 ---
