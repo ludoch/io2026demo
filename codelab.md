@@ -210,27 +210,55 @@ Visit `http://localhost:8000` in your browser to interact with the system!
 
 The true power of the A2A protocol is that these agents can be deployed as independent, auto-scaling serverless containers.
 
-Because this project uses the `jib-maven-plugin`, deploying to Cloud Run is seamless:
+Because this project uses the `jib-maven-plugin`, deploying to Cloud Run is seamless. Run these commands sequentially to deploy the entire system:
 
 ```bash
-# 1. Deploy the child agents
-mvn compile jib:build -pl researcher -Dimage=gcr.io/YOUR_PROJECT/researcher
-gcloud run deploy researcher --image gcr.io/YOUR_PROJECT/researcher --allow-unauthenticated
+# Set your target region
+export REGION="us-central1"
 
-# ... (Repeat for judge and content-builder) ...
-
-# 2. Deploy the Orchestrator, linking the child agent URLs
-mvn compile jib:build -pl orchestrator -Dimage=gcr.io/YOUR_PROJECT/orchestrator
-gcloud run deploy orchestrator \
-  --image gcr.io/YOUR_PROJECT/orchestrator \
-  --set-env-vars="RESEARCHER_URL=https://researcher-xxx.a.run.app,JUDGE_URL=https://judge-xxx.a.run.app,CONTENT_BUILDER_URL=https://builder-xxx.a.run.app" \
+# 1. Deploy the Researcher Agent
+mvn compile jib:build -pl researcher -Dimage=gcr.io/$PROJECT_ID/researcher
+gcloud run deploy researcher \
+  --image gcr.io/$PROJECT_ID/researcher \
+  --region $REGION \
   --allow-unauthenticated
 
-# 3. Deploy the App, linking the Orchestrator URL
-mvn compile jib:build -pl app -Dimage=gcr.io/YOUR_PROJECT/app
+# 2. Deploy the Judge Agent
+mvn compile jib:build -pl judge -Dimage=gcr.io/$PROJECT_ID/judge
+gcloud run deploy judge \
+  --image gcr.io/$PROJECT_ID/judge \
+  --region $REGION \
+  --allow-unauthenticated
+
+# 3. Deploy the Content Builder Agent
+mvn compile jib:build -pl content-builder -Dimage=gcr.io/$PROJECT_ID/content-builder
+gcloud run deploy content-builder \
+  --image gcr.io/$PROJECT_ID/content-builder \
+  --region $REGION \
+  --allow-unauthenticated
+
+# 4. Fetch the deployed URLs for the child agents
+RESEARCHER_URL=$(gcloud run services describe researcher --region $REGION --format 'value(status.url)')
+JUDGE_URL=$(gcloud run services describe judge --region $REGION --format 'value(status.url)')
+CONTENT_BUILDER_URL=$(gcloud run services describe content-builder --region $REGION --format 'value(status.url)')
+
+# 5. Deploy the Orchestrator, linking the child agent URLs
+mvn compile jib:build -pl orchestrator -Dimage=gcr.io/$PROJECT_ID/orchestrator
+gcloud run deploy orchestrator \
+  --image gcr.io/$PROJECT_ID/orchestrator \
+  --region $REGION \
+  --set-env-vars="RESEARCHER_URL=${RESEARCHER_URL},JUDGE_URL=${JUDGE_URL},CONTENT_BUILDER_URL=${CONTENT_BUILDER_URL}" \
+  --allow-unauthenticated
+
+# 6. Fetch the Orchestrator URL
+ORCHESTRATOR_URL=$(gcloud run services describe orchestrator --region $REGION --format 'value(status.url)')
+
+# 7. Deploy the Frontend App, linking the Orchestrator URL
+mvn compile jib:build -pl app -Dimage=gcr.io/$PROJECT_ID/app
 gcloud run deploy app \
-  --image gcr.io/YOUR_PROJECT/app \
-  --set-env-vars="AGENT_URL=https://orchestrator-xxx.a.run.app" \
+  --image gcr.io/$PROJECT_ID/app \
+  --region $REGION \
+  --set-env-vars="AGENT_URL=${ORCHESTRATOR_URL}" \
   --allow-unauthenticated
 ```
 
